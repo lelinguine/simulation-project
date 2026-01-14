@@ -37,6 +37,5 @@ ollama pull gemma3:1b
 
 # 📀 Run
 ```bash
-cd src
 python main.py
 ```

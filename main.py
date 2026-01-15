@@ -14,7 +14,7 @@ from classes import AnomalyDetector, Anomaly, Environment, Drone, ControlCenter
 
 
 # ------------------------------
-# 7. SIMULATION PRINCIPALE
+# SIMULATION PRINCIPALE
 # ------------------------------
 
 def create_test_environment():
@@ -22,10 +22,10 @@ def create_test_environment():
     env = Environment(width=100, height=100)
     
     # Ajout d'anomalies diverses
-    env.add_anomaly(Anomaly(x=30, y=70, intensity=0.9, radius=10, type='pollution'))
+    env.add_anomaly(Anomaly(x=30, y=70, intensity=0.9, radius=10, type='pluie_meteorites'))
     env.add_anomaly(Anomaly(x=75, y=25, intensity=0.85, radius=8, type='radiation'))
-    env.add_anomaly(Anomaly(x=50, y=50, intensity=0.7, radius=12, type='effondrement'))
-    env.add_anomaly(Anomaly(x=20, y=20, intensity=0.6, radius=6, type='pollution'))
+    env.add_anomaly(Anomaly(x=50, y=50, intensity=0.7, radius=12, type='inondations'))
+    env.add_anomaly(Anomaly(x=20, y=20, intensity=0.6, radius=6, type='pluie_meteorites'))
     env.add_anomaly(Anomaly(x=80, y=80, intensity=0.75, radius=9, type='radiation'))
     
     return env
@@ -69,6 +69,10 @@ def run_simulation(num_drones=5, num_steps=200, visualize=False):
     print("-" * 60)
     
     for step in range(num_steps):
+        # Évolution des anomalies
+        for anomaly in env.anomalies:
+            anomaly.evolve(step)
+        
         # Mise à jour de chaque drone
         for drone in drones:
             drone.update(env, drones)
@@ -109,7 +113,7 @@ def run_simulation(num_drones=5, num_steps=200, visualize=False):
 
 
 # ------------------------------
-# 8. VISUALISATION (OPTIONNEL)
+# VISUALISATION (OPTIONNEL)
 # ------------------------------
 
 def visualize_final_state(env, drones, control):
@@ -175,7 +179,7 @@ def visualize_final_state(env, drones, control):
 
 
 # ------------------------------
-# 9. POINT D'ENTRÉE PRINCIPAL
+# POINT D'ENTRÉE PRINCIPAL
 # ------------------------------
 
 if __name__ == "__main__":

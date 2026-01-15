@@ -16,7 +16,7 @@ import torch.optim as optim # lib pour les fonctions d'optimisation
 #--------------------------------------------
 
 # ------------------------------
-# 1. Données d'entrainement
+# Données d'entrainement
 # ------------------------------
 
 # Des entrees booleenes
@@ -37,7 +37,7 @@ y = y_XOR   # change to y_AND or y_OR as needed
 
 
 # ------------------------------
-# 2. Definition du reseau
+# Definition du reseau
 # ------------------------------
 
 class BooleanNet(nn.Module):
@@ -56,7 +56,7 @@ class BooleanNet(nn.Module):
 net = BooleanNet()
 
 # ------------------------------
-# 3. Etape de configuration
+# Etape de configuration
 # ------------------------------
 
 criterion = nn.BCELoss() # Binary Cross Entropy : adaptee pour les predicions 1 ou 0 (oui/non)
@@ -66,7 +66,7 @@ criterion = nn.BCELoss() # Binary Cross Entropy : adaptee pour les predicions 1 
 optimizer = optim.Adam(net.parameters(), lr=0.05) # optim moderne qui adapt le taux d'apprentissage (ici, 0.05)
 
 # ------------------------------
-# 4. Entrainement
+# Entrainement
 # ------------------------------
 for epoch in range(3000): # realise 3000 cycles d'apprentissage
     optimizer.zero_grad()

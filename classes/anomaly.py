@@ -69,3 +69,86 @@ class Anomaly:
                 if step % 25 == 0:
                     self.radius = max(5, self.radius - 0.3)
                     self.intensity = max(0.3, self.intensity - 0.015)
+    
+    def get_intervention_type(self):
+        """
+        Détermine le type d'intervention nécessaire selon l'anomalie et son intensité.
+        Retourne : dict avec 'type' (HUMAN/ROBOT), 'urgency' (LOW/MEDIUM/HIGH/CRITICAL)
+                   et 'description' de l'action recommandée
+        """
+        if self.type == 'radiation':
+            if self.intensity > 0.8:
+                return {
+                    'type': 'HUMAN',
+                    'urgency': 'CRITICAL',
+                    'description': 'Équipe spécialisée avec protection anti-radiation requise',
+                    'equipment': ['Combinaisons protection', 'Détecteurs radiation', 'Équipe décontamination']
+                }
+            elif self.intensity > 0.6:
+                return {
+                    'type': 'ROBOT',
+                    'urgency': 'HIGH',
+                    'description': 'Robot téléopéré pour analyse et confinement',
+                    'equipment': ['Robot exploration', 'Capteurs radiation', 'Matériel confinement']
+                }
+            else:
+                return {
+                    'type': 'ROBOT',
+                    'urgency': 'MEDIUM',
+                    'description': 'Surveillance robotique et mesures préventives',
+                    'equipment': ['Drone surveillance', 'Balises périmètre']
+                }
+        
+        elif self.type == 'inondations':
+            if self.intensity > 0.7:
+                return {
+                    'type': 'HUMAN',
+                    'urgency': 'HIGH',
+                    'description': 'Équipe évacuation et pompage d\'urgence',
+                    'equipment': ['Pompes haute capacité', 'Équipe sauvetage', 'Barrières anti-inondation']
+                }
+            elif self.intensity > 0.5:
+                return {
+                    'type': 'ROBOT',
+                    'urgency': 'MEDIUM',
+                    'description': 'Robots amphibies pour évaluation des dégâts',
+                    'equipment': ['Robots amphibies', 'Pompes mobiles', 'Capteurs niveau d\'eau']
+                }
+            else:
+                return {
+                    'type': 'ROBOT',
+                    'urgency': 'LOW',
+                    'description': 'Surveillance automatique du niveau d\'eau',
+                    'equipment': ['Capteurs automatiques', 'Système d\'alerte']
+                }
+        
+        elif self.type == 'pluie_meteorites':
+            if self.intensity > 0.8:
+                return {
+                    'type': 'HUMAN',
+                    'urgency': 'CRITICAL',
+                    'description': 'Évacuation immédiate et équipe d\'intervention d\'urgence',
+                    'equipment': ['Équipe évacuation', 'Unité médicale', 'Protection anti-débris']
+                }
+            elif self.intensity > 0.6:
+                return {
+                    'type': 'ROBOT',
+                    'urgency': 'HIGH',
+                    'description': 'Robots de déblaiement et analyse des impacts',
+                    'equipment': ['Robots déblaiement', 'Analyseurs composition', 'Équipement récupération']
+                }
+            else:
+                return {
+                    'type': 'ROBOT',
+                    'urgency': 'MEDIUM',
+                    'description': 'Inspection robotique de la zone d\'impact',
+                    'equipment': ['Drones inspection', 'Capteurs thermiques']
+                }
+        
+        # Type inconnu
+        return {
+            'type': 'HUMAN',
+            'urgency': 'MEDIUM',
+            'description': 'Inspection humaine pour évaluation',
+            'equipment': ['Équipe reconnaissance']
+        }

@@ -14,19 +14,57 @@ from classes import AnomalyDetector, Anomaly, Environment, Drone, ControlCenter
 
 
 # ------------------------------
-# 7. SIMULATION PRINCIPALE
+# SIMULATION PRINCIPALE
 # ------------------------------
 
 def create_test_environment():
     """Crée un environnement de test avec plusieurs anomalies."""
     env = Environment(width=100, height=100)
     
+    # Fonction helper pour trouver des positions près de l'eau
+    def find_water_positions(env, num_positions=3):
+        """Trouve des positions près de rivières ou lacs pour les inondations."""
+        water_positions = []
+        # Rechercher toutes les positions d'eau
+        for y in range(env.height):
+            for x in range(env.width):
+                if env.terrain_map[y, x] in [2, 3]:  # Rivière ou lac
+                    water_positions.append((x, y))
+        
+        # Sélectionner aléatoirement des positions d'eau
+        selected = []
+        if len(water_positions) > 0:
+            for _ in range(min(num_positions, len(water_positions))):
+                idx = random.randint(0, len(water_positions) - 1)
+                pos = water_positions[idx]
+                selected.append(pos)
+                # Retirer les positions proches pour éviter les chevauchements
+                water_positions = [p for p in water_positions 
+                                 if np.sqrt((p[0]-pos[0])**2 + (p[1]-pos[1])**2) > 15]
+        return selected
+    
     # Ajout d'anomalies diverses
-    env.add_anomaly(Anomaly(x=30, y=70, intensity=0.9, radius=10, type='pollution'))
+    # Pluies de météorites (peuvent apparaître n'importe où)
+    env.add_anomaly(Anomaly(x=30, y=70, intensity=0.9, radius=10, type='pluie_meteorites'))
+    env.add_anomaly(Anomaly(x=20, y=20, intensity=0.6, radius=6, type='pluie_meteorites'))
+    
+    # Radiation (peuvent apparaître n'importe où)
     env.add_anomaly(Anomaly(x=75, y=25, intensity=0.85, radius=8, type='radiation'))
-    env.add_anomaly(Anomaly(x=50, y=50, intensity=0.7, radius=12, type='effondrement'))
-    env.add_anomaly(Anomaly(x=20, y=20, intensity=0.6, radius=6, type='pollution'))
     env.add_anomaly(Anomaly(x=80, y=80, intensity=0.75, radius=9, type='radiation'))
+    
+    # Inondations (uniquement près des rivières et lacs)
+    water_pos = find_water_positions(env, num_positions=2)
+    for pos in water_pos:
+        # Ajouter un léger décalage aléatoire
+        offset_x = random.uniform(-3, 3)
+        offset_y = random.uniform(-3, 3)
+        env.add_anomaly(Anomaly(
+            x=pos[0] + offset_x, 
+            y=pos[1] + offset_y, 
+            intensity=random.uniform(0.65, 0.85), 
+            radius=random.uniform(8, 12), 
+            type='inondations'
+        ))
     
     return env
 
@@ -69,6 +107,10 @@ def run_simulation(num_drones=5, num_steps=200, visualize=False):
     print("-" * 60)
     
     for step in range(num_steps):
+        # Évolution des anomalies
+        for anomaly in env.anomalies:
+            anomaly.evolve(step)
+        
         # Mise à jour de chaque drone
         for drone in drones:
             drone.update(env, drones)
@@ -83,6 +125,7 @@ def run_simulation(num_drones=5, num_steps=200, visualize=False):
         
         # Affichage périodique
         if step % 50 == 0:
+            control.analyze_interventions(env)
             control.print_status(drones)
             exploration_pct = (env.exploration_map.sum() / env.exploration_map.size) * 100
             print(f"\nProgression : {exploration_pct:.1f}% de la zone explorée")
@@ -92,6 +135,8 @@ def run_simulation(num_drones=5, num_steps=200, visualize=False):
     print("SIMULATION TERMINÉE - RAPPORT FINAL")
     print("="*60)
     
+    # Analyse des interventions requises
+    control.analyze_interventions(env)
     control.print_status(drones)
     
     exploration_pct = (env.exploration_map.sum() / env.exploration_map.size) * 100
@@ -109,25 +154,58 @@ def run_simulation(num_drones=5, num_steps=200, visualize=False):
 
 
 # ------------------------------
-# 8. VISUALISATION (OPTIONNEL)
+# VISUALISATION (OPTIONNEL)
 # ------------------------------
 
 def visualize_final_state(env, drones, control):
     """Crée une visualisation de l'état final de la simulation."""
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 7))
     
-    # Carte d'exploration
-    ax1.imshow(env.exploration_map, cmap='Greens', origin='lower', alpha=0.6)
-    ax1.set_title('Carte d\'Exploration', fontsize=14, fontweight='bold')
+    # Carte de terrain avec couleurs selon le type d'environnement
+    # Création d'une carte de couleurs pour le terrain
+    terrain_colors = np.zeros((env.height, env.width, 4))  # RGBA
+    for y in range(env.height):
+        for x in range(env.width):
+            terrain = env.terrain_map[y, x]
+            if terrain == 0:  # Plaine
+                terrain_colors[y, x] = [0.95, 0.90, 0.70, 1.0]  # Beige clair
+            elif terrain == 1:  # Forêt
+                terrain_colors[y, x] = [0.13, 0.55, 0.13, 1.0]  # Vert forêt
+            elif terrain == 2:  # Rivière
+                terrain_colors[y, x] = [0.25, 0.41, 0.88, 1.0]  # Bleu rivière
+            elif terrain == 3:  # Lac
+                terrain_colors[y, x] = [0.00, 0.45, 0.70, 1.0]  # Bleu lac
+    
+    ax1.imshow(terrain_colors, origin='lower')
+    
+    # Overlay de la carte d'exploration (en semi-transparent)
+    ax1.imshow(env.exploration_map, cmap='Greens', origin='lower', alpha=0.3)
+    ax1.set_title('Carte d\'Exploration et Terrain', fontsize=14, fontweight='bold')
     ax1.set_xlabel('X')
     ax1.set_ylabel('Y')
     
-    # Anomalies réelles
+    # Anomalies réelles avec couleurs selon le type
+    anomaly_colors = {
+        'pluie_meteorites': ('#FF6B00', 'orange'),  # Orange
+        'radiation': ('#FFD700', 'yellow'),          # Jaune doré
+        'inondations': ('#00CED1', 'darkturquoise')  # Turquoise
+    }
+    
+    # Pour éviter les doublons dans la légende
+    added_labels = set()
+    
     for anomaly in env.anomalies:
+        color_hex, color_name = anomaly_colors.get(anomaly.type, ('#FF0000', 'red'))
+        label = f'{anomaly.type.replace("_", " ").title()}' if anomaly.type not in added_labels else None
+        
         circle = Circle((anomaly.x, anomaly.y), anomaly.radius, 
-                           color='red', alpha=0.3, label='Anomalie')
+                           color=color_hex, alpha=0.3, label=label)
         ax1.add_patch(circle)
-        ax1.plot(anomaly.x, anomaly.y, 'rx', markersize=10, markeredgewidth=2)
+        ax1.plot(anomaly.x, anomaly.y, 'x', color=color_hex, markersize=10, 
+                markeredgewidth=2)
+        
+        if anomaly.type not in added_labels and label:
+            added_labels.add(anomaly.type)
     
     # Trajectoires des drones
     cmap = plt.get_cmap('rainbow')
@@ -175,7 +253,7 @@ def visualize_final_state(env, drones, control):
 
 
 # ------------------------------
-# 9. POINT D'ENTRÉE PRINCIPAL
+# POINT D'ENTRÉE PRINCIPAL
 # ------------------------------
 
 if __name__ == "__main__":

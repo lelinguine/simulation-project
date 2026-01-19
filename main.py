@@ -1,11 +1,17 @@
 import numpy as np
-import matplotlib.pyplot as plt
-from matplotlib.patches import Circle
 import random
-from datetime import datetime
+import os
 
 # Import des classes depuis le dossier classes
 from classes import AnomalyDetector, Anomaly, Environment, Drone, ControlCenter
+
+# Codes couleur ANSI pour le terminal
+class Colors:
+    RED = '\033[91m'      # Anomalies réelles
+    YELLOW = '\033[93m'   # Anomalies détectées par les drones
+    CYAN = '\033[96m'     # Anomalies connues par la base
+    GREEN = '\033[92m'    # Drones et leur zone de détection
+    RESET = '\033[0m'     # Reset couleur
 
 #==============================================================================
 # SYSTÈME AUTONOME DE DRONES COOPÉRATIFS
@@ -14,40 +20,179 @@ from classes import AnomalyDetector, Anomaly, Environment, Drone, ControlCenter
 
 
 # ------------------------------
-# 7. SIMULATION PRINCIPALE
+# UTILITAIRES DE CONFIGURATION
+# ------------------------------
+
+def set_global_seed(seed):
+    """Fixe l'aléatoire pour numpy et random si un seed est fourni."""
+    if seed is None:
+        return
+    np.random.seed(seed)
+    random.seed(seed)
+
+
+def clear_screen():
+    """Efface l'écran du terminal."""
+    os.system('cls' if os.name == 'nt' else 'clear')
+
+
+def display_simulation_grid(env, drones, control, step, num_steps, initial_info=""):
+    """Affiche l'état de la simulation sous forme de grille ASCII dans le terminal."""
+    clear_screen()
+    
+    # Dimensions de la grille d'affichage (réduire pour tenir dans le terminal)
+    display_width = min(80, env.width)
+    display_height = min(40, env.height)
+    scale_x = env.width / display_width
+    scale_y = env.height / display_height
+    
+    # Créer la grille vide
+    grid = [[' ' for _ in range(display_width)] for _ in range(display_height)]
+    
+    # Marquer les zones explorées (depuis la carte globale du centre de contrôle)
+    if control.global_exploration_map is not None:
+        for y in range(display_height):
+            for x in range(display_width):
+                real_x = int(x * scale_x)
+                real_y = int(y * scale_y)
+                if real_y < control.global_exploration_map.shape[0] and real_x < control.global_exploration_map.shape[1]:
+                    if control.global_exploration_map[real_y, real_x] > 0:
+                        grid[display_height - 1 - y][x] = '·'  # Zone explorée
+    
+    # Placer les anomalies réelles (en rouge - priorité basse, affichées en premier)
+    for anomaly in env.anomalies:
+        grid_x = int(anomaly.x / scale_x)
+        grid_y = display_height - 1 - int(anomaly.y / scale_y)
+        if 0 <= grid_y < display_height and 0 <= grid_x < display_width:
+            if anomaly.type == 'pollution':
+                grid[grid_y][grid_x] = f"{Colors.RED}☢{Colors.RESET}"
+            elif anomaly.type == 'radiation':
+                grid[grid_y][grid_x] = f"{Colors.RED}☣{Colors.RESET}"
+            else:
+                grid[grid_y][grid_x] = f"{Colors.RED}⚠{Colors.RESET}"
+    
+    # Placer les anomalies détectées par les drones (en jaune - priorité moyenne, écrase rouge)
+    for drone in drones:
+        for anomaly_info in drone.detected_anomalies:
+            pos = anomaly_info['position']
+            grid_x = int(pos[0] / scale_x)
+            grid_y = display_height - 1 - int(pos[1] / scale_y)
+            if 0 <= grid_y < display_height and 0 <= grid_x < display_width:
+                grid[grid_y][grid_x] = f"{Colors.YELLOW}☣{Colors.RESET}"  # Symbole jaune pour détectées
+    
+    # Placer les anomalies connues par la base (en cyan - priorité haute, écrase tout)
+    for pos, intensity in control.global_anomaly_map.items():
+        grid_x = int(pos[0] / scale_x)
+        grid_y = display_height - 1 - int(pos[1] / scale_y)
+        if 0 <= grid_y < display_height and 0 <= grid_x < display_width:
+            grid[grid_y][grid_x] = f"{Colors.CYAN}☢{Colors.RESET}"  # Symbole cyan pour connues
+    
+    # Placer la base
+    base_grid_x = int(control.base_x / scale_x)
+    base_grid_y = display_height - 1 - int(control.base_y / scale_y)
+    if 0 <= base_grid_y < display_height and 0 <= base_grid_x < display_width:
+        grid[base_grid_y][base_grid_x] = '█'
+    
+    # Placer les drones (en dernier pour qu'ils soient visibles)
+    for i, drone in enumerate(drones):
+        drone_grid_x = int(drone.x / scale_x)
+        drone_grid_y = display_height - 1 - int(drone.y / scale_y)
+        
+        # Afficher la zone de détection 5×5 autour du drone (de -2 à +2)
+        for dx in range(-2, 3):
+            for dy in range(-2, 3):
+                gx = drone_grid_x + dx
+                gy = drone_grid_y + dy
+                if 0 <= gy < display_height and 0 <= gx < display_width:
+                    if grid[gy][gx] == ' ' or grid[gy][gx] == '·':
+                        grid[gy][gx] = f"{Colors.GREEN}o{Colors.RESET}"
+        
+        # Placer le drone par-dessus la zone (en vert)
+        if 0 <= drone_grid_y < display_height and 0 <= drone_grid_x < display_width:
+            grid[drone_grid_y][drone_grid_x] = f"{Colors.GREEN}{str(i)}{Colors.RESET}"
+    
+    # Afficher les infos initiales si fournies
+    if initial_info:
+        print(initial_info)
+    
+    # Afficher l'en-tête
+    print("="*80)
+    print(f"  SIMULATION - Tour {step+1}/{num_steps}".center(80))
+    print("="*80)
+    
+    # Afficher la grille
+    print("┌" + "─" * display_width + "┐")
+    for row in grid:
+        print("│" + ''.join(row) + "│")
+    print("└" + "─" * display_width + "┘")
+    
+    # Légende
+    print("\nLÉGENDE :")
+    print(f"  {Colors.GREEN}0-9{Colors.RESET} = Drones  |  {Colors.GREEN}o{Colors.RESET} = Zone détection | █ = Base")
+    print(f"  {Colors.RED}⚠{Colors.RESET} = Anomalies réelles")
+    print(f"  {Colors.YELLOW}⚠{Colors.RESET} = Anomalies détectées par les drones")
+    print(f"  {Colors.CYAN}⚠{Colors.RESET} = Anomalies connues par la base")
+    print("  · = Exploré (zones connues par le centre de contrôle)")
+    print("  [✓] = Drone synchronisé (retour base au moins 1×)")
+    
+    # Statistiques
+    if control.global_exploration_map is not None:
+        exploration_pct = (control.global_exploration_map.sum() / control.global_exploration_map.size) * 100
+    else:
+        exploration_pct = 0.0
+    current_time_sim = step * 1.0  # secondes
+    time_min = int(current_time_sim // 60)
+    time_sec = int(current_time_sim % 60)
+    print(f"\nSTATISTIQUES :")
+    print(f"  Temps simulé : {time_min}min {time_sec}s")
+    print(f"  Exploration : {exploration_pct:.1f}%")
+    print(f"  Anomalies actives : {len(env.anomalies)}")
+    print(f"  Anomalies détectées : {len(control.global_anomaly_map)}")
+    
+    # État des drones
+    print(f"\nÉTAT DES DRONES :")
+    for drone in drones:
+        print(f"  Drone {drone.id}: {drone.status_text}")
+    
+    print("="*80)
+
+
+# ------------------------------
+# SIMULATION PRINCIPALE
 # ------------------------------
 
 def create_test_environment():
     """Crée un environnement de test avec plusieurs anomalies."""
     env = Environment(width=100, height=100)
     
-    # Ajout d'anomalies diverses
-    env.add_anomaly(Anomaly(x=30, y=70, intensity=0.9, radius=10, type='pollution'))
-    env.add_anomaly(Anomaly(x=75, y=25, intensity=0.85, radius=8, type='radiation'))
-    env.add_anomaly(Anomaly(x=50, y=50, intensity=0.7, radius=12, type='effondrement'))
-    env.add_anomaly(Anomaly(x=20, y=20, intensity=0.6, radius=6, type='pollution'))
-    env.add_anomaly(Anomaly(x=80, y=80, intensity=0.75, radius=9, type='radiation'))
+    # Ajout d'anomalies diverses avec intensités plus fortes et rayons plus grands
+    env.add_anomaly(Anomaly(x=30, y=70, intensity=1.5, radius=15, type='pollution'))
+    env.add_anomaly(Anomaly(x=75, y=25, intensity=1.3, radius=12, type='radiation'))
+    env.add_anomaly(Anomaly(x=50, y=50, intensity=1.2, radius=18, type='effondrement'))
+    env.add_anomaly(Anomaly(x=20, y=20, intensity=1.0, radius=10, type='pollution'))
+    env.add_anomaly(Anomaly(x=80, y=80, intensity=1.4, radius=14, type='radiation'))
     
     return env
 
 
-def run_simulation(num_drones=5, num_steps=200, visualize=False):
+def run_simulation(num_drones=5, num_steps=200, seed=None, display_interval=10):
     """
     Exécute la simulation complète du système de drones.
+    
+    Args:
+        num_drones: Nombre de drones
+        num_steps: Nombre de tours de simulation
+        seed: Seed pour la reproductibilité (None = aléatoire)
+        display_interval: Intervalle d'affichage de la grille (en tours)
     """
-    print("\n" + "="*60)
-    print("SIMULATION : SYSTÈME DE DRONES COOPÉRATIFS")
-    print("="*60)
+    # 0. Fixer le seed si fourni
+    set_global_seed(seed)
     
     # 1. Créer le détecteur d'anomalies
     detector = AnomalyDetector()
-    print("Détecteur d'anomalies initialisé")
-    print("="*60 + "\n")
     
     # 2. Créer l'environnement
     env = create_test_environment()
-    print(f"Environnement créé : {env.width}x{env.height}")
-    print(f"Anomalies présentes : {len(env.anomalies)}\n")
     
     # 3. Créer le centre de contrôle
     base_x, base_y = 10, 10
@@ -60,32 +205,52 @@ def run_simulation(num_drones=5, num_steps=200, visualize=False):
         x = base_x + random.uniform(-5, 5)
         y = base_y + random.uniform(-5, 5)
         drone = Drone(i, x, y, detector, base_x, base_y)
+        # Améliorer les paramètres des drones
+        drone.speed = 3.0  # Vitesse augmentée
+        # Initialiser avec des temps d'activité différents pour décaler les retours (0 à 1500s)
+        drone.activity_time = random.uniform(0, 1500)
         drones.append(drone)
     
-    print(f"{num_drones} drones créés et déployés\n")
+    # Assigner des zones initiales différentes à chaque drone pour meilleure couverture
+    zone_targets = [
+        (25, 75),   # Nord-Ouest
+        (75, 75),   # Nord-Est  
+        (50, 50),   # Centre
+        (25, 25),   # Sud-Ouest
+        (75, 25),   # Sud-Est
+        (15, 50),   # Ouest
+        (85, 50),   # Est
+    ]
+    for i, drone in enumerate(drones):
+        if i < len(zone_targets):
+            drone.target_x, drone.target_y = zone_targets[i]
     
-    # 5. Boucle de simulation
-    print("DÉBUT DE LA SIMULATION")
-    print("-" * 60)
+    # 5. Préparation des informations permanentes
+    initial_info = f"""{'='*60}
+   PROJET IA - SYSTÈME AUTONOME DE DRONES COOPÉRATIFS
+{'='*60}
+Seed: {seed if seed else 'Aléatoire'} | Drones: {num_drones} | Carte: {env.width}x{env.height} | Anomalies initiales: {len(env.anomalies)}
+"""
+    
+    delta_time = 1.0  # Chaque tour = 1 seconde
+    current_time = 0.0
     
     for step in range(num_steps):
+        current_time = step * delta_time
+        
+        # Évolution de l'environnement (anomalies)
+        env.update(current_time, delta_time)
+        
         # Mise à jour de chaque drone
         for drone in drones:
-            drone.update(env, drones)
-            
-            # Transmission au centre de contrôle (depuis n'importe où)
-            if step % 10 == 0:  # Transmission périodique
-                control.receive_transmission(drone)
-            
-            # Réception des mises à jour (seulement à la base)
-            if drone.is_at_base:
-                control.send_update_to_drone(drone)
+            drone.update(env, drones, delta_time, control)
         
-        # Affichage périodique
-        if step % 50 == 0:
-            control.print_status(drones)
-            exploration_pct = (env.exploration_map.sum() / env.exploration_map.size) * 100
-            print(f"\nProgression : {exploration_pct:.1f}% de la zone explorée")
+        # Affichage dynamique de la grille
+        if step % display_interval == 0:
+            display_simulation_grid(env, drones, control, step, num_steps, initial_info)
+    
+    # Affichage final
+    display_simulation_grid(env, drones, control, num_steps-1, num_steps, initial_info)
     
     # 6. Rapport final
     print("\n" + "="*60)
@@ -94,7 +259,10 @@ def run_simulation(num_drones=5, num_steps=200, visualize=False):
     
     control.print_status(drones)
     
-    exploration_pct = (env.exploration_map.sum() / env.exploration_map.size) * 100
+    if control.global_exploration_map is not None:
+        exploration_pct = (control.global_exploration_map.sum() / control.global_exploration_map.size) * 100
+    else:
+        exploration_pct = 0.0
     print(f"\nSTATISTIQUES FINALES :")
     print(f"   - Zone explorée : {exploration_pct:.1f}%")
     print(f"   - Anomalies réelles : {len(env.anomalies)}")
@@ -109,94 +277,17 @@ def run_simulation(num_drones=5, num_steps=200, visualize=False):
 
 
 # ------------------------------
-# 8. VISUALISATION (OPTIONNEL)
-# ------------------------------
-
-def visualize_final_state(env, drones, control):
-    """Crée une visualisation de l'état final de la simulation."""
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 7))
-    
-    # Carte d'exploration
-    ax1.imshow(env.exploration_map, cmap='Greens', origin='lower', alpha=0.6)
-    ax1.set_title('Carte d\'Exploration', fontsize=14, fontweight='bold')
-    ax1.set_xlabel('X')
-    ax1.set_ylabel('Y')
-    
-    # Anomalies réelles
-    for anomaly in env.anomalies:
-        circle = Circle((anomaly.x, anomaly.y), anomaly.radius, 
-                           color='red', alpha=0.3, label='Anomalie')
-        ax1.add_patch(circle)
-        ax1.plot(anomaly.x, anomaly.y, 'rx', markersize=10, markeredgewidth=2)
-    
-    # Trajectoires des drones
-    cmap = plt.get_cmap('rainbow')
-    colors = cmap(np.linspace(0, 1, len(drones)))
-    for drone, color in zip(drones, colors):
-        path = np.array(drone.path_history)
-        ax1.plot(path[:, 0], path[:, 1], '-', color=color, alpha=0.5, linewidth=1)
-        ax1.plot(drone.x, drone.y, 'o', color=color, markersize=10, 
-                label=f'Drone {drone.id}')
-    
-    # Base
-    ax1.plot(control.base_x, control.base_y, 's', color='blue', 
-            markersize=15, label='Base', markeredgewidth=2, markeredgecolor='black')
-    
-    ax1.legend(loc='upper right', fontsize=8)
-    ax1.grid(True, alpha=0.3)
-    
-    # Carte des anomalies détectées
-    anomaly_grid = np.zeros((env.height, env.width))
-    for pos, intensity in control.global_anomaly_map.items():
-        if 0 <= pos[0] < env.width and 0 <= pos[1] < env.height:
-            anomaly_grid[pos[1], pos[0]] = intensity
-    
-    im = ax2.imshow(anomaly_grid, cmap='hot', origin='lower', vmin=0, vmax=1)
-    ax2.set_title('Anomalies Détectées', fontsize=14, fontweight='bold')
-    ax2.set_xlabel('X')
-    ax2.set_ylabel('Y')
-    plt.colorbar(im, ax=ax2, label='Intensité')
-    
-    # Zones prioritaires
-    priority_zones = control.get_priority_zones()
-    for zone in priority_zones[:10]:
-        ax2.plot(zone['position'][0], zone['position'][1], 'y*', 
-                markersize=15, markeredgewidth=1, markeredgecolor='black')
-    
-    plt.tight_layout()
-    
-    # Génération d'un nom de fichier unique avec timestamp
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    filename = f'results/simulation_{timestamp}.png'
-    
-    plt.savefig(filename, dpi=150, bbox_inches='tight')
-    print(f"\nVisualisation sauvegardée : {filename}")
-    plt.show()
-
-
-# ------------------------------
-# 9. POINT D'ENTRÉE PRINCIPAL
+# POINT D'ENTRÉE PRINCIPAL
 # ------------------------------
 
 if __name__ == "__main__":
-    print("\n" + "="*60)
-    print("   PROJET IA - SYSTÈME AUTONOME DE DRONES COOPÉRATIFS")
-    print("   Surveillance d'Environnements Sensibles - 2025")
-    print("="*60 + "\n")
-    
-    # Exécuter la simulation
+    # Exécuter la simulation avec visualisation en terminal
     env, drones, control = run_simulation(
-        num_drones=5,      # Nombre de drones dans l'essaim
-        num_steps=200,     # Nombre de pas de simulation
-        visualize=False
+        num_drones=7,           # Nombre de drones dans l'essaim
+        num_steps=5000,         # Nombre de pas de simulation (5000 secondes = 1h 23min)
+        seed=42,                # Seed pour reproductibilité (None = aléatoire)
+        display_interval=50     # Affichage toutes les 50 tours
     )
-    
-    # Visualisation optionnelle
-    try:
-        visualize_final_state(env, drones, control)
-    except Exception as e:
-        print(f"\nVisualisation non disponible : {e}")
-        print("   (Installation de matplotlib requise pour la visualisation)")
     
     print("\n" + "="*60)
     print("Programme terminé avec succès !")

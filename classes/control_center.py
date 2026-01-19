@@ -1,3 +1,5 @@
+import numpy as np
+
 class ControlCenter:
     """
     Centre de contrôle pour coordonner l'essaim de drones.
@@ -6,17 +8,26 @@ class ControlCenter:
         self.base_x = base_x
         self.base_y = base_y
         self.global_anomaly_map = {}  # Position -> intensité
+        self.global_exploration_map = None  # Carte d'exploration fusionnée (sera initialisée)
         self.received_transmissions = []
         
     def receive_transmission(self, drone):
         """
         Reçoit les données d'un drone.
-        Les drones peuvent transmettre depuis n'importe où.
+        Fusionne sa carte d'exploration et ses anomalies détectées.
         """
+        # Initialiser la carte globale si nécessaire
+        if self.global_exploration_map is None and drone.exploration_map is not None:
+            self.global_exploration_map = np.zeros_like(drone.exploration_map)
+        
+        # Fusionner la carte d'exploration du drone
+        if drone.exploration_map is not None and self.global_exploration_map is not None:
+            self.global_exploration_map = np.maximum(self.global_exploration_map, drone.exploration_map)
+        
         transmission = {
             'drone_id': drone.id,
             'position': (drone.x, drone.y),
-            'battery': drone.battery,
+            'activity_time': drone.activity_time,
             'anomalies': drone.detected_anomalies.copy(),
             'timestamp': len(self.received_transmissions)
         }
@@ -34,14 +45,34 @@ class ControlCenter:
     
     def send_update_to_drone(self, drone):
         """
-        Envoie une mise à jour au drone.
+        Envoie la carte globale des anomalies et d'exploration au drone.
         Le drone doit être à la base pour recevoir.
         """
         if not drone.can_receive_updates():
             return False
         
-        # Transmission de la carte globale
-        # (Dans une vraie implémentation, on pourrait synchroniser les données)
+        # Synchronisation de la carte d'exploration globale
+        if self.global_exploration_map is not None:
+            drone.exploration_map = self.global_exploration_map.copy()
+        
+        # Synchronisation de la carte globale des anomalies avec le drone
+        # Le drone reçoit toutes les anomalies connues par le centre
+        for pos, intensity in self.global_anomaly_map.items():
+            # Vérifier si le drone ne connaît pas déjà cette anomalie
+            already_known = any(
+                abs(a['position'][0] - pos[0]) < 5 and 
+                abs(a['position'][1] - pos[1]) < 5 
+                for a in drone.detected_anomalies
+            )
+            
+            if not already_known:
+                # Ajouter l'anomalie à la connaissance du drone
+                drone.detected_anomalies.append({
+                    'position': pos,
+                    'intensity': intensity,
+                    'timestamp': -1  # Marqué comme reçu du centre
+                })
+        
         return True
     
     def get_priority_zones(self):
@@ -75,9 +106,12 @@ class ControlCenter:
         print("\nÉTAT DES DRONES :")
         for drone in drones:
             status = "BASE" if drone.is_at_base else "MISSION"
+            time_info = f"Activité: {drone.activity_time:.0f}s/{drone.max_activity_time}s"
+            if drone.is_charging:
+                time_info = f"Recharge: {drone.recharge_time:.0f}s/{drone.max_recharge_time}s"
             print(f"  Drone {drone.id}: {status} | "
                   f"Pos: ({drone.x:.1f}, {drone.y:.1f}) | "
-                  f"Batterie: {drone.battery:.1f}% | "
+                  f"{time_info} | "
                   f"Mode: {drone.mode}")
         
         priority_zones = self.get_priority_zones()

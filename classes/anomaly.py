@@ -6,9 +6,12 @@ class Anomaly:
     """Représente une anomalie dans l'environnement."""
     x: float
     y: float
-    intensity: float  # 0.0 à 1.0
+    intensity: float  # 0.0 à 2.0+
     radius: float
     type: str  # 'pollution', 'radiation', 'effondrement', etc.
+    creation_time: float = 0.0  # Temps de création
+    is_propagating: bool = True  # Si l'anomalie peut se propager
+    propagation_cooldown: float = 0.0  # Temps avant prochaine propagation
     
     def get_sensor_reading(self, drone_x, drone_y):
         """
@@ -40,3 +43,41 @@ class Anomaly:
         else:
             return [base_temp + 8*influence, base_radiation + influence*0.5, 
                    base_pollution + influence*0.5, base_movement + influence*0.5, base_noise + influence*0.5]
+    
+    def evolve(self, current_time, environment, delta_time=1.0):
+        """
+        Fait évoluer l'anomalie dans le temps.
+        - Propagation : création de nouvelles anomalies à proximité
+        """
+        # PROPAGATION (création de nouvelles anomalies)
+        if self.is_propagating and self.intensity > 0.5:
+            self.propagation_cooldown -= delta_time
+            
+            if self.propagation_cooldown <= 0:
+                # Probabilité de propagation basée sur l'intensité (réduite pour simulation longue)
+                if np.random.random() < 0.03 * self.intensity * delta_time:
+                    # Créer une nouvelle anomalie à proximité
+                    angle = np.random.random() * 2 * np.pi
+                    distance = self.radius * np.random.uniform(0.8, 1.5)
+                    
+                    new_x = self.x + distance * np.cos(angle)
+                    new_y = self.y + distance * np.sin(angle)
+                    
+                    # Vérifier que c'est dans l'environnement
+                    if 0 <= new_x < environment.width and 0 <= new_y < environment.height:
+                        new_anomaly = Anomaly(
+                            x=new_x,
+                            y=new_y,
+                            intensity=self.intensity * 0.6,  # Intensité réduite
+                            radius=self.radius * 0.8,
+                            type=self.type,
+                            creation_time=current_time,
+                            is_propagating=True,
+                            propagation_cooldown=300.0  # Cooldown de 300 secondes (5min)
+                        )
+                        environment.add_anomaly(new_anomaly)
+                        
+                        # Reset cooldown (augmenté pour ralentir la propagation)
+                        self.propagation_cooldown = 600.0 + np.random.uniform(0, 300)
+        
+        return 'keep'  # Garder l'anomalie

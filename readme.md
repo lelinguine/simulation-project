@@ -1,9 +1,9 @@
 # 💿 Installation
+
 ### Environment
 ```bash
 python -m venv env
 ```
----
 **Linux**</br>
 ```bash
 source env/bin/activate
@@ -26,13 +26,6 @@ pip install torch torchvision --index-url https://download.pytorch.org/whl/cu130
 ### Requirements
 ```bash
 pip install -r requirements.txt
-```
-
-### Ollama
-Follow instructions at:
-https://docs.ollama.com/quickstart
-```bash
-ollama pull gemma3:1b
 ```
 
 # 📀 Run

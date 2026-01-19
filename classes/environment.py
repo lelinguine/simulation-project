@@ -11,7 +11,8 @@ class Environment:
         self.width = width
         self.height = height
         self.anomalies: List[Anomaly] = []
-        self.exploration_map = np.zeros((height, width))  # 0 = non exploré, 1 = exploré
+        self.last_random_spawn_time = 0.0
+        self.random_spawn_interval = 1800.0  # Une nouvelle anomalie tous les 30 minutes
         
     def add_anomaly(self, anomaly: Anomaly):
         """Ajoute une anomalie à l'environnement."""
@@ -36,11 +37,31 @@ class Environment:
         
         return torch.tensor(sensor_data, dtype=torch.float32)
     
-    def mark_explored(self, x, y, radius=2):
-        """Marque une zone comme explorée."""
-        x_int, y_int = int(x), int(y)
-        for dx in range(-radius, radius+1):
-            for dy in range(-radius, radius+1):
-                nx, ny = x_int + dx, y_int + dy
-                if 0 <= nx < self.width and 0 <= ny < self.height:
-                    self.exploration_map[ny, nx] = 1
+    def update(self, current_time, delta_time=1.0):
+        """
+        Met à jour l'état de l'environnement.
+        - Évolution des anomalies existantes (propagation uniquement)
+        - Apparition aléatoire de nouvelles anomalies
+        """
+        # 1. Évolution des anomalies existantes (propagation)
+        for anomaly in self.anomalies:
+            anomaly.evolve(current_time, self, delta_time)
+        
+        # 2. Apparition aléatoire de nouvelles anomalies
+        if current_time - self.last_random_spawn_time > self.random_spawn_interval:
+            if np.random.random() < 0.1:  # 10% de chance
+                # Créer une nouvelle anomalie aléatoire
+                types = ['pollution', 'radiation', 'effondrement']
+                new_type = np.random.choice(types)
+                
+                new_anomaly = Anomaly(
+                    x=np.random.uniform(10, self.width - 10),
+                    y=np.random.uniform(10, self.height - 10),
+                    intensity=np.random.uniform(0.8, 1.5),
+                    radius=np.random.uniform(8, 15),
+                    type=new_type,
+                    creation_time=current_time,
+                    is_propagating=True
+                )
+                self.add_anomaly(new_anomaly)
+                self.last_random_spawn_time = current_time

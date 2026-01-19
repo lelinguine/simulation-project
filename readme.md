@@ -28,13 +28,6 @@ pip install torch torchvision --index-url https://download.pytorch.org/whl/cu130
 pip install -r requirements.txt
 ```
 
-### Ollama
-Follow instructions at:
-https://docs.ollama.com/quickstart
-```bash
-ollama pull gemma3:1b
-```
-
 # 📀 Run
 ```bash
 python main.py

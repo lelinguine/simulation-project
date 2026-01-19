@@ -1,4 +1,3 @@
-import torch
 import numpy as np
 from typing import List
 from classes.anomaly import Anomaly
@@ -137,7 +136,7 @@ class Environment:
         # Normalisation et limitation des valeurs
         sensor_data = [min(max(v, 0), 100) for v in sensor_data]
         
-        return torch.tensor(sensor_data, dtype=torch.float32)
+        return np.array(sensor_data, dtype=np.float32)
     
     def mark_explored(self, x, y, radius=2):
         """Marque une zone comme explorée."""

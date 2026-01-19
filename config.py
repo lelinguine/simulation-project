@@ -93,8 +93,8 @@ ROBOT_STRATEGY = 'action'
 # ====================
 # VISUALISATION
 # ====================
-SAVE_MOVEMENTS_CSV = False           # Exporter les déplacements en CSV
-SAVE_VISUALIZATION = False           # Sauvegarder l'image PNG
+SAVE_MOVEMENTS_CSV = True           # Exporter les déplacements en CSV
+SAVE_VISUALIZATION = True           # Sauvegarder l'image PNG
 
 # ====================
 # DEBUG

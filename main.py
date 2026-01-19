@@ -5,7 +5,6 @@ import random
 from datetime import datetime
 import os
 import csv
-import torch
 
 # Import des classes depuis le dossier classes
 from classes import AnomalyDetector, Anomaly, Environment, Drone, ControlCenter
@@ -22,17 +21,11 @@ import config
 # ------------------------------
 
 def set_global_seed(seed):
-    """Fixe l'aléatoire pour numpy, random et torch si un seed est fourni."""
+    """Fixe l'aléatoire pour numpy et random si un seed est fourni."""
     if seed is None:
         return
-    try:
-        np.random.seed(seed)
-        random.seed(seed)
-        torch.manual_seed(seed)
-    except Exception:
-        # Continuer même si torch n'est pas disponible
-        np.random.seed(seed)
-        random.seed(seed)
+    np.random.seed(seed)
+    random.seed(seed)
 
 def get_base_position(map_width, map_height, base_config):
     """

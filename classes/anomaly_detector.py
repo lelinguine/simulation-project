@@ -1,4 +1,4 @@
-import torch
+import numpy as np
 
 class AnomalyDetector:
     """
@@ -18,7 +18,7 @@ class AnomalyDetector:
         Retourne : (is_anomaly, intensity)
         """
         # Extraction des valeurs des capteurs
-        if isinstance(sensor_data, torch.Tensor):
+        if isinstance(sensor_data, np.ndarray):
             temp, radiation, meteorites, floods = sensor_data.tolist()
         else:
             temp, radiation, meteorites, floods = sensor_data

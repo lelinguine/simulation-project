@@ -3,15 +3,14 @@ import torch
 class AnomalyDetector:
     """
     Détecteur d'anomalies basé sur des seuils.
-    Analyse 5 capteurs : température, radiation, pollution, mouvement, bruit.
+    Analyse 4 capteurs : température, radiation, pluie de météorites, inondations.
     """
     def __init__(self):
         # Seuils de détection pour chaque type de capteur
         self.threshold_temp = 30.0      # Température anormale > 30°C
         self.threshold_radiation = 0.4  # Radiation anormale > 0.4
-        self.threshold_pollution = 0.3  # Pollution anormale > 0.3
-        self.threshold_movement = 0.4   # Mouvement anormal > 0.4
-        self.threshold_noise = 0.4      # Bruit anormal > 0.4
+        self.threshold_meteorites = 0.3  # Pluie de météorites anormale > 0.3
+        self.threshold_floods = 0.4   # Inondations anormales > 0.4
     
     def detect_anomaly(self, sensor_data, threshold=0.5):
         """
@@ -20,9 +19,9 @@ class AnomalyDetector:
         """
         # Extraction des valeurs des capteurs
         if isinstance(sensor_data, torch.Tensor):
-            temp, radiation, pollution, movement, noise = sensor_data.tolist()
+            temp, radiation, meteorites, floods = sensor_data.tolist()
         else:
-            temp, radiation, pollution, movement, noise = sensor_data
+            temp, radiation, meteorites, floods = sensor_data
         
         # Calcul du score d'anomalie (somme pondérée)
         anomaly_score = 0.0
@@ -33,14 +32,11 @@ class AnomalyDetector:
         if radiation > self.threshold_radiation:
             anomaly_score += 0.3 * ((radiation - self.threshold_radiation) / (1.0 - self.threshold_radiation))
         
-        if pollution > self.threshold_pollution:
-            anomaly_score += 0.2 * ((pollution - self.threshold_pollution) / (1.0 - self.threshold_pollution))
+        if meteorites > self.threshold_meteorites:
+            anomaly_score += 0.2 * ((meteorites - self.threshold_meteorites) / (1.0 - self.threshold_meteorites))
         
-        if movement > self.threshold_movement:
-            anomaly_score += 0.1 * ((movement - self.threshold_movement) / (1.0 - self.threshold_movement))
-        
-        if noise > self.threshold_noise:
-            anomaly_score += 0.1 * ((noise - self.threshold_noise) / (1.0 - self.threshold_noise))
+        if floods > self.threshold_floods:
+            anomaly_score += 0.2 * ((floods - self.threshold_floods) / (1.0 - self.threshold_floods))
         
         # Normalisation entre 0 et 1
         intensity = min(anomaly_score, 1.0)

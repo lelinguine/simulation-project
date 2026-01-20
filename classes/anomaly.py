@@ -69,9 +69,7 @@ class Anomaly:
         if self.intensity == 1:  # Si faible
             if np.random.random() < config.ANOMALY_SNOWBALL_CHANCE:
                 # Passe de faible à intense
-                old_intensity = self.intensity
                 self.intensity = 2  # Devient intense
-                # print(f"[SNOWBALL] Anomalie {self.type} à ({self.x:.1f}, {self.y:.1f}) : {old_intensity} → {self.intensity} (INTENSE)")
         
         # SPREAD : Anomalie intense propage sur cases adjacentes
         if self.intensity == 2:  # Si intense
@@ -124,7 +122,6 @@ class Anomaly:
                         treated=False
                     )
                     environment.anomalies.append(new_anomaly)
-                    # print(f"[SPREAD] Anomalie {self.type} propagée à ({new_x}, {new_y}) intensité {new_anomaly.intensity}")
         
         # Comportement spécifique au type d'anomalie
         # Note: avec intensité 1 ou 2, pas de variation continue

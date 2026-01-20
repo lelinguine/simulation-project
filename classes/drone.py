@@ -73,9 +73,13 @@ class Drone:
         self.target_x = None
         self.target_y = None
         self.target_anomaly = None  # Si en train de traiter une anomalie
+        self.next_planned_action = None  # Action prévue (pour communication)
         
         # Flag pour détecter quand on ne peut plus explorer depuis la base
         self.exploration_blocked_from_base = False
+        
+        # Compteur pour tracker les tours en attente à la base
+        self.waiting_at_base_counter = 0
         
         # Statistiques d'activité (compteurs de tours)
         self.activity_stats = {
@@ -450,12 +454,10 @@ class Drone:
     
     def treat_anomaly(self, anomaly_info):
         """
-        Traite une anomalie (action avec temps de scan approfondi).
-        Coût : DEEP_SCAN_TIME secondes pour anomalie faible (10s)
-               DEEP_SCAN_TIME * 1.5 secondes pour anomalie intense (15s)
+        Traite une anomalie (action instantanée).
+        Coût : 5 batterie pour faible (1), 15 batterie pour intense (2)
         
-        Consomme de la batterie basée sur le temps de traitement.
-        Sécurité : traite seulement si on peut revenir à la base APRÈS traitement
+        Sécurité: traite seulement si on peut revenir à la base APRÈS traitement
         """
         # Déterminer le coût selon l'intensité
         anomaly_obj = anomaly_info.get('anomaly')
@@ -471,14 +473,7 @@ class Drone:
                 ]
             return False
         
-        # Calculer le temps de traitement en secondes
-        if anomaly_obj.intensity == 2:  # Intense
-            treatment_time = config.DEEP_SCAN_TIME * 1.5  # 15 secondes
-        else:  # Faible
-            treatment_time = config.DEEP_SCAN_TIME  # 10 secondes
-        
-        # Calculer le coût batterie basé sur le temps
-        treatment_cost = config.BATTERY_DRAIN_PER_SECOND * treatment_time
+        treatment_cost = config.TREATMENT_COST_INTENSE if anomaly_obj.intensity == 2 else config.TREATMENT_COST_WEAK
         
         # Calculer le coût pour revenir à la base APRÈS traitement
         distance_to_base = self.calculate_distance(self.x, self.y, self.base_x, self.base_y)
@@ -548,9 +543,12 @@ class Drone:
                 
                 # Si aucune anomalie accessible non plus → rester à la base en attente
                 if self.target_anomaly is None and not exploration_complete and exploration_impossible:
+                    self.waiting_at_base_counter += 1
                     # Garder la cible à la base pour rester en attente
                     self.target_x = self.base_x
                     self.target_y = self.base_y
+                else:
+                    self.waiting_at_base_counter = 0  # Réinitialiser si on peut faire quelque chose
         
         # ========== STRATÉGIE ACTION ==========
         elif strategy == 'action':
@@ -616,9 +614,12 @@ class Drone:
                 
                 # Si exploration aussi bloquée → rester à la base en attente
                 if self.exploration_blocked_from_base:
+                    self.waiting_at_base_counter += 1
                     self.target_x = self.base_x
                     self.target_y = self.base_y
                     self.target_anomaly = None  # IMPORTANT : pas d'anomalie accessible
+                else:
+                    self.waiting_at_base_counter = 0  # Réinitialiser si on peut faire quelque chose
         
         # ========== STRATÉGIE MIXTE ==========
         elif strategy == 'mixte':
@@ -828,13 +829,7 @@ class Drone:
         
         # Consommer batterie proportionnellement à la distance parcourue
         distance_traveled = np.hypot(self.x - prev_x, self.y - prev_y)
-        
-        # Temps de déplacement = distance / vitesse (en secondes)
-        movement_time = distance_traveled / self.speed if self.speed > 0 else 0
-        
-        # Consommation batterie = drain par seconde * temps + coût mouvement
-        battery_drain = (config.BATTERY_DRAIN_PER_SECOND * movement_time * config.TIME_PER_TURN) + (self.movement_cost * distance_traveled)
-        self.battery -= battery_drain
+        self.battery -= self.movement_cost * distance_traveled
         self.battery = max(0, self.battery)  # Empêcher batterie négative
         
         # Marquer le chemin comme exploré pour éviter les trous
@@ -879,10 +874,7 @@ class Drone:
         # Recharge à la base
         if self.is_at_base:
             old_battery = self.battery
-            # Recharge basée sur BATTERY_RECHARGE_RATE (calculé pour 10 min de recharge)
-            # Chaque tour = TIME_PER_TURN secondes
-            recharge_amount = config.BATTERY_RECHARGE_RATE * config.TIME_PER_TURN
-            self.battery = min(self.battery_max, self.battery + recharge_amount)
+            self.battery = min(self.battery_max, self.battery + config.BATTERY_RECHARGE_RATE)
             # Compter comme "recharging" UNIQUEMENT si la batterie augmente (vraie recharge)
             if self.battery > old_battery:
                 current_activity = 'recharging'
@@ -946,6 +938,22 @@ class Drone:
         # 2C : Si pas de cible, en sélectionner une
         elif self.target_x is None or self.target_y is None:
             self.select_next_target(environment, other_drones)
+            
+            # ANNONCER l'action prévue aux robots proches (APRÈS sélection)
+            if self.target_anomaly is not None:
+                # Vérifier d'abord si assez de batterie pour traiter (pas besoin du retour)
+                anomaly_obj = self.target_anomaly.get('anomaly')
+                if anomaly_obj is not None:
+                    treatment_cost = config.TREATMENT_COST_INTENSE if anomaly_obj.intensity == 2 else config.TREATMENT_COST_WEAK
+                else:
+                    treatment_cost = config.TREATMENT_COST_WEAK
+                
+                if self.battery >= treatment_cost:
+                    # Assez de batterie → annoncer qu'on va traiter cette anomalie
+                    self.announce_next_action('treat_anomaly', (self.target_x, self.target_y), other_drones, self.target_anomaly)
+            elif self.target_x is not None:
+                # Exploration
+                self.announce_next_action('explore', (self.target_x, self.target_y), other_drones)
         
         # 2D : Si à proximité de la cible
         elif self.calculate_distance(self.x, self.y, self.target_x, self.target_y) < 3.0:
@@ -1047,3 +1055,19 @@ class Drone:
         
         # Enregistrer l'activité de ce tour
         self.activity_stats[current_activity] += 1
+    
+    def transmit_to_control_center(self):
+        """
+        Prépare les données à transmettre au centre de contrôle.
+        Le drone peut transmettre depuis n'importe où.
+        """
+        return {
+            'drone_id': self.id,
+            'position': (self.x, self.y),
+            'battery': self.battery,
+            'is_at_base': self.is_at_base,
+            'personal_exploration': self.personal_exploration_map.copy(),
+            'personal_anomalies': self.personal_anomaly_map.copy(),
+            'detected_anomalies': self.detected_anomalies.copy(),
+            'path_history': self.path_history.copy()
+        }

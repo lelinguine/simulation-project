@@ -9,22 +9,13 @@ MAX_TURNS = 300                # Nombre maximum de tours
 NUM_DRONES = 5                   # Nombre de robots dans l'essaim
 
 # ====================
-# PARAMĂˆTRES DE TEMPS (Objectif 4 - Optionnel)
+# PARAMÈTRES DE BATTERIE ET ÉNERGIE
 # ====================
-TIME_PER_TURN = 1                # 1 tour = 1 seconde
-AUTONOMY_TIME = 30 * 60          # 30 minutes d'autonomie = 1800 secondes
-RECHARGE_TIME = 10 * 60          # 10 minutes de recharge = 600 secondes
-DEEP_SCAN_TIME = 10              # 10 secondes pour mesure approfondie
-
-# ====================
-# PARAMĂˆTRES DE BATTERIE ET Ă‰NERGIE
-# ====================
-BATTERY_MAX = 100.0                 # CapacitĂ© maximale de batterie
-BATTERY_DRAIN_PER_SECOND = BATTERY_MAX / AUTONOMY_TIME  # Drain basĂ© sur 30 min d'autonomie
-BATTERY_RECHARGE_RATE = BATTERY_MAX / RECHARGE_TIME     # Recharge basĂ©e sur 10 min
-MOVEMENT_COST = 0.1                # Batterie consommĂ©e par dĂ©placement (coefficient)
-TREATMENT_COST_WEAK = BATTERY_DRAIN_PER_SECOND * DEEP_SCAN_TIME      # Batterie pour traiter anomalie FAIBLE (10 sec)
-TREATMENT_COST_INTENSE = BATTERY_DRAIN_PER_SECOND * DEEP_SCAN_TIME * 1.5  # Batterie pour traiter anomalie INTENSE (15 sec)
+BATTERY_MAX = 100.0                 # Capacité maximale de batterie
+BATTERY_RECHARGE_RATE = 10.0        # Batterie rechargée par tour à la base
+MOVEMENT_COST = 0.1                # Batterie consommée par déplacement
+TREATMENT_COST_WEAK = 5.0           # Batterie consommée pour traiter une anomalie FAIBLE (intensité 1)
+TREATMENT_COST_INTENSE = 15.0       # Batterie consommée pour traiter une anomalie INTENSE (intensité 2)
 BATTERY_DEPARTURE_THRESHOLD = 0.85   # % de batterie max avant de quitter la base (baissé pour plus d'exploration)
 
 # ====================
